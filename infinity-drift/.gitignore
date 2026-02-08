@@ -1,0 +1,18 @@
+# Godot 4.x
+.import/
+.export/
+.mono/
+.godot/
+
+# Build artifacts
+**/build/
+**/dist/
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

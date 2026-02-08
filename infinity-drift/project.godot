@@ -1,0 +1,74 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="TopDownDrift"
+run/main_scene="res://scenes/Menu.tscn"
+config/features=PackedStringArray("4.5")
+
+[display]
+
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/size/mode=2
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[input]
+
+steer_left={
+"deadzone": 0.5,
+"events": [{
+"device": -1,
+"keycode": 65,
+"method": 0,
+"modifiers": 0,
+"physical_keycode": 65,
+"unicode": 97
+}]
+}
+steer_right={
+"deadzone": 0.5,
+"events": [{
+"device": -1,
+"keycode": 68,
+"method": 0,
+"modifiers": 0,
+"physical_keycode": 68,
+"unicode": 100
+}]
+}
+pause={
+"deadzone": 0.5,
+"events": [{
+"device": -1,
+"keycode": 16777217,
+"method": 0,
+"modifiers": 0,
+"physical_keycode": 16777217,
+"unicode": 0
+}]
+}
+restart={
+"deadzone": 0.5,
+"events": [{
+"device": -1,
+"keycode": 82,
+"method": 0,
+"modifiers": 0,
+"physical_keycode": 82,
+"unicode": 114
+}]
+}
+
+[rendering]
+
+canvas_textures/default_texture_filter=1
