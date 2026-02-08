@@ -6,24 +6,26 @@ extends Node2D
 @export var car_width_units := 70.0
 @export var lane_width_m := 3.3
 @export var shoulder_width_m := 2.0
-@export var base_max_speed := 480.0
+@export var base_max_speed := 960.0
 @export var speed_increase_per_km := 30.0
-@export var accel := 220.0
+@export var accel := 440.0
 @export var fuel_max := 100.0
 @export var fuel_consumption_base := 3.0
 @export var fuel_speed_factor := 0.004
+@export var infinite_fuel := true
 @export var distance_scale := 0.02
 @export var durability_max := 100.0
 @export var milestone_km := 1.0
-@export var road_start_straight_m := 100.0
-@export var road_segment_min_m := 160.0
-@export var road_segment_max_m := 280.0
-@export var road_curve_offset_min := 120.0
-@export var road_curve_offset_max := 220.0
-@export var road_center_limit := 260.0
+@export var road_start_straight_m := 30.0
+@export var road_segment_min_m := 50.0
+@export var road_segment_max_m := 70.0
+@export var road_curve_offset_min := 50.0
+@export var road_curve_offset_max := 100.0
+@export var road_center_limit := 340.0
 @export var road_lookahead_m := 2000.0
-@export var offroad_damage_per_sec := 6.0
-@export var offroad_drag_per_sec := 140.0
+@export var offroad_speed_multiplier := 0.7
+@export var offroad_drift_multiplier := 2.0
+@export var fence_offset_m := 5.0
 
 @onready var car: CarController = $Car
 @onready var spawner: Node = $World/Spawner
@@ -37,6 +39,7 @@ extends Node2D
 var fuel := 0.0
 var durability := 0.0
 var distance_m := 0.0
+var road_progress_m := 0.0
 var time_s := 0.0
 var road_center_x := 0.0
 var _milestones := 0
@@ -55,6 +58,7 @@ var _road_segment_index := 0
 var _last_curve_dir := 1
 var _lane_width_units := 0.0
 var _shoulder_width_units := 0.0
+var _fence_offset_units := 0.0
 
 func _ready() -> void:
 	var stats: Dictionary = SaveManager.load_stats()
@@ -94,6 +98,7 @@ func start_run() -> void:
 	fuel = fuel_max
 	durability = durability_max
 	distance_m = 0.0
+	road_progress_m = 0.0
 	time_s = 0.0
 	_milestones = 0
 	_update_road_metrics()
@@ -127,18 +132,22 @@ func _physics_process(delta: float) -> void:
 	audio.set_engine_speed(car.speed, car.max_speed)
 
 func _update_road(delta: float) -> void:
-	_ensure_road(distance_m + road_lookahead_m)
-	road_center_x = _get_road_center(distance_m)
+	_ensure_road(road_progress_m + road_lookahead_m)
+	road_center_x = _get_road_center(road_progress_m)
 	if road_backdrop.has_method("set_road"):
-		road_backdrop.call("set_road", road_center_x, road_width, distance_m, _lane_width_units, _shoulder_width_units)
+		road_backdrop.call("set_road", road_center_x, road_width, road_progress_m, _lane_width_units, _shoulder_width_units, _fence_offset_units)
 
 func _update_stats(delta: float) -> void:
 	time_s += delta
 	distance_m += car.speed * delta * distance_scale
-	var consumption: float = fuel_consumption_base + car.speed * fuel_speed_factor
-	fuel = max(fuel - consumption * delta, 0.0)
-	if fuel <= 0.0:
-		_end_run()
+	var meters_per_unit: float = car_width_m / car_width_units
+	var speed_mps: float = car.velocity.length() * meters_per_unit
+	road_progress_m += speed_mps * delta
+	if not infinite_fuel:
+		var consumption: float = fuel_consumption_base + car.speed * fuel_speed_factor
+		fuel = max(fuel - consumption * delta, 0.0)
+		if fuel <= 0.0:
+			_end_run()
 
 func _update_speed_cap() -> void:
 	var growth: float = (distance_m / 1000.0) * speed_increase_per_km
@@ -148,10 +157,11 @@ func _update_offroad(delta: float) -> void:
 	var offset: float = abs(car.position.x - road_center_x)
 	var limit: float = road_width * 0.5 - road_margin
 	if offset > limit:
-		var dir: float = sign(car.position.x - road_center_x)
-		car.position.x = road_center_x + dir * limit
-		car.speed = max(car.speed - offroad_drag_per_sec * delta, car.max_speed * 0.45)
-		car.velocity.x = 0.0
+		car.surface_speed_multiplier = offroad_speed_multiplier
+		car.surface_drift_multiplier = offroad_drift_multiplier
+	else:
+		car.surface_speed_multiplier = 1.0
+		car.surface_drift_multiplier = 1.0
 
 func _update_milestones() -> void:
 	var km: float = distance_m / 1000.0
@@ -162,7 +172,10 @@ func _update_milestones() -> void:
 
 func _update_ui() -> void:
 	if hud.has_method("update_stats"):
-		hud.call("update_stats", fuel, fuel_max, durability, durability_max, distance_m, time_s, car.speed, _best_distance, _best_time)
+		var meters_per_unit: float = car_width_m / car_width_units
+		var speed_mps: float = car.velocity.length() * meters_per_unit
+		var speed_kmh: float = speed_mps * 3.6
+		hud.call("update_stats", fuel, fuel_max, durability, durability_max, distance_m, time_s, speed_kmh, _best_distance, _best_time)
 
 func _pause_for_upgrade() -> void:
 	_paused = true
@@ -276,6 +289,7 @@ func _update_road_metrics() -> void:
 	var units_per_meter: float = car_width_units / car_width_m
 	_lane_width_units = lane_width_m * units_per_meter
 	_shoulder_width_units = shoulder_width_m * units_per_meter
+	_fence_offset_units = fence_offset_m * units_per_meter
 	road_width = (_lane_width_units * 2.0) + (_shoulder_width_units * 2.0)
 	road_margin = car_width_units * 0.5
 
@@ -320,8 +334,8 @@ func _add_curve_segment(length_m: float, dir: int) -> void:
 	_road_last_center = end_center
 
 func _add_random_segment() -> void:
-	if randf() < 0.25:
-		_add_straight_segment(randf_range(120.0, 200.0))
+	if randf() < 0.03:
+		_add_straight_segment(randf_range(60.0, 110.0))
 		return
 	var dir: int = -_last_curve_dir
 	if randf() < 0.35:

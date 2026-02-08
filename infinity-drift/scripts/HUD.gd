@@ -18,12 +18,12 @@ func _ready() -> void:
 	restart_button.pressed.connect(func(): emit_signal("request_restart"))
 	menu_button.pressed.connect(func(): emit_signal("request_menu"))
 
-func update_stats(fuel: float, fuel_max: float, durability: float, durability_max: float, distance_m: float, time_s: float, speed: float, best_distance: float, best_time: float) -> void:
+func update_stats(fuel: float, fuel_max: float, durability: float, durability_max: float, distance_m: float, time_s: float, speed_kmh: float, best_distance: float, best_time: float) -> void:
 	fuel_label.text = "Fuel: %d/%d" % [int(round(fuel)), int(round(fuel_max))]
 	durability_label.text = "Durability: %d/%d" % [int(round(durability)), int(round(durability_max))]
 	distance_label.text = "Distance: %.1f km" % [distance_m / 1000.0]
 	time_label.text = "Time: %.1f s" % [time_s]
-	speed_label.text = "Speed: %d" % [int(round(speed))]
+	speed_label.text = "Speed: %d km/h" % [int(round(speed_kmh))]
 	best_label.text = "Best: %.1f km / %.1f s" % [best_distance / 1000.0, best_time]
 
 func show_game_over(show: bool) -> void:

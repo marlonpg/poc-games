@@ -6,13 +6,15 @@ var _road_width := 520.0
 var _distance_m := 0.0
 var _lane_width := 260.0
 var _shoulder_width := 80.0
+var _fence_offset := 120.0
 
-func set_road(center_x: float, width: float, distance_m: float, lane_width: float, shoulder_width: float) -> void:
+func set_road(center_x: float, width: float, distance_m: float, lane_width: float, shoulder_width: float, fence_offset: float) -> void:
 	_road_center_x = center_x
 	_road_width = width
 	_distance_m = distance_m
 	_lane_width = lane_width
 	_shoulder_width = shoulder_width
+	_fence_offset = fence_offset
 	queue_redraw()
 
 func _draw() -> void:
@@ -28,6 +30,7 @@ func _draw() -> void:
 	var line_color := Color(0.9, 0.9, 0.9, 0.7)
 	var edge_color := Color(0.95, 0.95, 0.95, 0.8)
 	var shoulder_color := Color(0.95, 0.95, 0.95, 0.55)
+	var fence_color := Color(0.12, 0.12, 0.12, 0.9)
 	draw_rect(Rect2(top_left, viewport_size), grass_color)
 
 	var road_center_world: float = _road_center_x
@@ -45,6 +48,12 @@ func _draw() -> void:
 	var right_shoulder_x: float = road_right - _shoulder_width - shoulder_line_width
 	draw_rect(Rect2(Vector2(left_shoulder_x, top_left.y), Vector2(shoulder_line_width, viewport_size.y)), shoulder_color)
 	draw_rect(Rect2(Vector2(right_shoulder_x, top_left.y), Vector2(shoulder_line_width, viewport_size.y)), shoulder_color)
+
+	var fence_width: float = 5.0
+	var left_fence_x: float = road_left - _fence_offset - fence_width
+	var right_fence_x: float = road_right + _fence_offset
+	draw_rect(Rect2(Vector2(left_fence_x, top_left.y), Vector2(fence_width, viewport_size.y)), fence_color)
+	draw_rect(Rect2(Vector2(right_fence_x, top_left.y), Vector2(fence_width, viewport_size.y)), fence_color)
 
 	var dash_spacing: float = 120.0
 	var dash_length: float = 60.0

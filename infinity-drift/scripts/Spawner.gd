@@ -31,6 +31,7 @@ func _process(delta: float) -> void:
 		return
 	if not _game.call("is_run_active"):
 		return
+	return
 	_hazard_timer += delta
 	_fuel_timer += delta
 	var difficulty: float = float(_game.call("get_difficulty"))
