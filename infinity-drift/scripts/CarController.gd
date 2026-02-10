@@ -5,8 +5,8 @@ signal hazard_hit(damage: float)
 signal fuel_collected(amount: float)
 signal drift_state_changed(is_drifting: bool)
 
-@export var accel := 220.0
-@export var max_speed := 480.0
+@export var accel := 320.0
+@export var max_speed := 240.0
 @export var turn_speed := 2.9
 @export var drift_factor := 6.0
 @export var drift_alignment := 0.32

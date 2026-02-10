@@ -6,6 +6,8 @@ extends Node2D
 @export var car_width_units := 70.0
 @export var lane_width_m := 3.3
 @export var shoulder_width_m := 2.0
+@export var track_mode := true
+@export var curb_width_m := 0.4
 @export var base_max_speed := 960.0
 @export var speed_increase_per_km := 30.0
 @export var accel := 440.0
@@ -17,12 +19,21 @@ extends Node2D
 @export var durability_max := 100.0
 @export var milestone_km := 1.0
 @export var road_start_straight_m := 30.0
-@export var road_segment_min_m := 50.0
-@export var road_segment_max_m := 70.0
-@export var road_curve_offset_min := 50.0
-@export var road_curve_offset_max := 100.0
+@export var straight_chance := 0.03
+@export var straight_min_m := 60.0
+@export var straight_max_m := 110.0
+@export var hairpin_radius_min_m := 8.0
+@export var hairpin_radius_max_m := 15.0
+@export var hairpin_angle_min_deg := 120.0
+@export var hairpin_angle_max_deg := 180.0
+@export var medium_radius_min_m := 25.0
+@export var medium_radius_max_m := 40.0
+@export var medium_angle_min_deg := 60.0
+@export var medium_angle_max_deg := 120.0
+@export var hairpin_chance := 0.45
 @export var road_center_limit := 340.0
 @export var road_lookahead_m := 2000.0
+@export var road_curve_preview_m := 220.0
 @export var offroad_speed_multiplier := 0.7
 @export var offroad_drift_multiplier := 2.0
 @export var fence_offset_m := 5.0
@@ -59,6 +70,8 @@ var _last_curve_dir := 1
 var _lane_width_units := 0.0
 var _shoulder_width_units := 0.0
 var _fence_offset_units := 0.0
+var _curb_width_units := 0.0
+var _track_points: PackedVector2Array = PackedVector2Array()
 
 func _ready() -> void:
 	var stats: Dictionary = SaveManager.load_stats()
@@ -71,6 +84,7 @@ func _ready() -> void:
 	_base_durability_max = durability_max
 	_base_max_speed = base_max_speed
 	_update_road_metrics()
+	_init_track()
 	randomize()
 
 	car.hazard_hit.connect(_on_hazard_hit)
@@ -103,6 +117,7 @@ func start_run() -> void:
 	_milestones = 0
 	_update_road_metrics()
 	_init_road()
+	_init_track()
 	car.max_speed = _base_max_speed
 	car.accel = accel
 	car.reset()
@@ -132,10 +147,13 @@ func _physics_process(delta: float) -> void:
 	audio.set_engine_speed(car.speed, car.max_speed)
 
 func _update_road(delta: float) -> void:
+	if track_mode:
+		return
 	_ensure_road(road_progress_m + road_lookahead_m)
 	road_center_x = _get_road_center(road_progress_m)
+	var road_center_future: float = _get_road_center(road_progress_m + road_curve_preview_m)
 	if road_backdrop.has_method("set_road"):
-		road_backdrop.call("set_road", road_center_x, road_width, road_progress_m, _lane_width_units, _shoulder_width_units, _fence_offset_units)
+		road_backdrop.call("set_road", road_center_x, road_center_future, road_width, road_progress_m, _lane_width_units, _shoulder_width_units, _fence_offset_units)
 
 func _update_stats(delta: float) -> void:
 	time_s += delta
@@ -154,9 +172,15 @@ func _update_speed_cap() -> void:
 	car.max_speed = _base_max_speed + _upgrades["speed"] * 60.0 + growth
 
 func _update_offroad(delta: float) -> void:
-	var offset: float = abs(car.position.x - road_center_x)
 	var limit: float = road_width * 0.5 - road_margin
-	if offset > limit:
+	var offroad := false
+	if track_mode:
+		var distance_to_track: float = _distance_to_track(car.position)
+		offroad = distance_to_track > limit
+	else:
+		var offset: float = abs(car.position.x - road_center_x)
+		offroad = offset > limit
+	if offroad:
 		car.surface_speed_multiplier = offroad_speed_multiplier
 		car.surface_drift_multiplier = offroad_drift_multiplier
 	else:
@@ -290,6 +314,7 @@ func _update_road_metrics() -> void:
 	_lane_width_units = lane_width_m * units_per_meter
 	_shoulder_width_units = shoulder_width_m * units_per_meter
 	_fence_offset_units = fence_offset_m * units_per_meter
+	_curb_width_units = curb_width_m * units_per_meter
 	road_width = (_lane_width_units * 2.0) + (_shoulder_width_units * 2.0)
 	road_margin = car_width_units * 0.5
 
@@ -301,6 +326,45 @@ func _init_road() -> void:
 	_last_curve_dir = 1
 	_add_straight_segment(road_start_straight_m)
 	_ensure_road(distance_m + road_lookahead_m)
+
+func _init_track() -> void:
+	if not track_mode:
+		return
+	_track_points = _build_preset_track()
+	if road_backdrop.has_method("set_track"):
+		road_backdrop.call("set_track", _track_points, road_width, _curb_width_units)
+
+func _build_preset_track() -> PackedVector2Array:
+	var units_per_meter: float = car_width_units / car_width_m
+	var pts: Array = [
+		Vector2(-36, 0), Vector2(-36, -40), Vector2(-10, -40), Vector2(-10, -20),
+		Vector2(-30, -20), Vector2(-30, -70), Vector2(30, -70), Vector2(30, -20),
+		Vector2(10, -20), Vector2(10, -40), Vector2(36, -40), Vector2(36, 0),
+		Vector2(12, 0), Vector2(12, 20), Vector2(36, 20), Vector2(36, 60),
+		Vector2(-36, 60), Vector2(-36, 20), Vector2(-12, 20), Vector2(-12, 0)
+	]
+	var result := PackedVector2Array()
+	for p in pts:
+		result.append(p * units_per_meter)
+	return result
+
+func _distance_to_track(point: Vector2) -> float:
+	if _track_points.size() < 2:
+		return 0.0
+	var min_dist := INF
+	for i in range(_track_points.size()):
+		var a: Vector2 = _track_points[i]
+		var b: Vector2 = _track_points[(i + 1) % _track_points.size()]
+		var ab: Vector2 = b - a
+		var t: float = 0.0
+		var ab_len_sq: float = ab.length_squared()
+		if ab_len_sq > 0.0:
+			t = clamp((point - a).dot(ab) / ab_len_sq, 0.0, 1.0)
+		var closest: Vector2 = a + ab * t
+		var d: float = point.distance_to(closest)
+		if d < min_dist:
+			min_dist = d
+	return min_dist
 
 func _ensure_road(target_m: float) -> void:
 	while _road_end_m < target_m:
@@ -321,7 +385,7 @@ func _add_straight_segment(length_m: float) -> void:
 func _add_curve_segment(length_m: float, dir: int) -> void:
 	var start_m: float = _road_end_m
 	var end_m: float = _road_end_m + length_m
-	var offset: float = randf_range(road_curve_offset_min, road_curve_offset_max) * dir
+	var offset: float = randf_range(50.0, 100.0) * dir
 	var end_center: float = clamp(_road_last_center + offset, -road_center_limit, road_center_limit)
 	var seg: Dictionary = {
 		"start_m": start_m,
@@ -334,14 +398,35 @@ func _add_curve_segment(length_m: float, dir: int) -> void:
 	_road_last_center = end_center
 
 func _add_random_segment() -> void:
-	if randf() < 0.03:
-		_add_straight_segment(randf_range(60.0, 110.0))
+	if randf() < straight_chance:
+		_add_straight_segment(randf_range(straight_min_m, straight_max_m))
 		return
 	var dir: int = -_last_curve_dir
 	if randf() < 0.35:
 		dir = _last_curve_dir
 	_last_curve_dir = dir
-	_add_curve_segment(randf_range(road_segment_min_m, road_segment_max_m), dir)
+	var use_hairpin: bool = randf() < hairpin_chance
+	var radius_m: float = randf_range(hairpin_radius_min_m, hairpin_radius_max_m) if use_hairpin else randf_range(medium_radius_min_m, medium_radius_max_m)
+	var angle_deg: float = randf_range(hairpin_angle_min_deg, hairpin_angle_max_deg) if use_hairpin else randf_range(medium_angle_min_deg, medium_angle_max_deg)
+	var theta: float = deg_to_rad(angle_deg)
+	var length_m: float = radius_m * theta
+	var units_per_meter: float = car_width_units / car_width_m
+	var offset_units: float = radius_m * (1.0 - cos(theta)) * dir * units_per_meter
+	_add_curve_segment_with_offset(length_m, offset_units)
+
+func _add_curve_segment_with_offset(length_m: float, offset: float) -> void:
+	var start_m: float = _road_end_m
+	var end_m: float = _road_end_m + length_m
+	var end_center: float = clamp(_road_last_center + offset, -road_center_limit, road_center_limit)
+	var seg: Dictionary = {
+		"start_m": start_m,
+		"end_m": end_m,
+		"start_center": _road_last_center,
+		"end_center": end_center
+	}
+	_road_segments.append(seg)
+	_road_end_m = end_m
+	_road_last_center = end_center
 
 func _get_road_center(at_m: float) -> float:
 	while _road_segment_index < _road_segments.size() - 1:
